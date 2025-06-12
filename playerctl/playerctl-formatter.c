@@ -651,10 +651,19 @@ static GVariant *helperfn_resolve(struct token *token, GVariant **args, int narg
 
 static GVariant *helperfn_trunc(struct token *token, GVariant **args, int nargs, GError **error,
                                 GVariantDict *context) {
-    if (nargs != 2) {
+    if (nargs != 2 && nargs != 3) {
         g_set_error(error, playerctl_formatter_error_quark(), 1,
-                    "function trunc takes exactly two arguments (got %d)", nargs);
+                    "function trunc takes two or three arguments (got %d)", nargs);
         return NULL;
+    }
+    gboolean should_append = TRUE;
+    if (nargs == 3) {
+      if (!g_variant_type_equal(g_variant_get_type(args[2]), G_VARIANT_TYPE_DOUBLE)) {
+          g_set_error(error, playerctl_formatter_error_quark(), 1,
+                      "function trunc's should_append parameter can only be called with an int");
+          return NULL;
+      }
+      should_append = g_variant_get_double(args[2]) != 0;
     }
 
     GVariant *value = args[0];
@@ -673,7 +682,7 @@ static GVariant *helperfn_trunc(struct token *token, GVariant **args, int nargs,
     gchar *trunc = g_utf8_substring(orig, 0, g_variant_get_double(len));
 
     GString *formatted = g_string_new(trunc);
-    if (g_utf8_strlen(trunc, 256) < g_utf8_strlen(orig, 256)) {
+    if (should_append && g_utf8_strlen(trunc, 256) < g_utf8_strlen(orig, 256)) {
         g_string_append(formatted, "…");
     }
 
