@@ -430,7 +430,8 @@ static GList *tokenize_format(const char *format, GError **error) {
     return tokens;
 }
 
-static GVariant *helperfn_lc(struct token *token, GVariant **args, int nargs, GError **error) {
+static GVariant *helperfn_lc(struct token *token, GVariant **args, int nargs, GError **error,
+                             GVariantDict *context) {
     if (nargs != 1) {
         g_set_error(error, playerctl_formatter_error_quark(), 1,
                     "function lc takes exactly one argument (got %d)", nargs);
@@ -450,7 +451,8 @@ static GVariant *helperfn_lc(struct token *token, GVariant **args, int nargs, GE
     return ret;
 }
 
-static GVariant *helperfn_uc(struct token *token, GVariant **args, int nargs, GError **error) {
+static GVariant *helperfn_uc(struct token *token, GVariant **args, int nargs, GError **error,
+                             GVariantDict *context) {
     if (nargs != 1) {
         g_set_error(error, playerctl_formatter_error_quark(), 1,
                     "function uc takes exactly one argument (got %d)", nargs);
@@ -470,8 +472,8 @@ static GVariant *helperfn_uc(struct token *token, GVariant **args, int nargs, GE
     return ret;
 }
 
-static GVariant *helperfn_duration(struct token *token, GVariant **args, int nargs,
-                                   GError **error) {
+static GVariant *helperfn_duration(struct token *token, GVariant **args, int nargs, GError **error,
+                                   GVariantDict *context) {
     if (nargs != 1) {
         g_set_error(error, playerctl_formatter_error_quark(), 1,
                     "function uc takes exactly one argument (got %d)", nargs);
@@ -523,7 +525,7 @@ static GVariant *helperfn_duration(struct token *token, GVariant **args, int nar
 /* Calls g_markup_escape_text to replace the text with appropriately escaped
 characters for XML */
 static GVariant *helperfn_markup_escape(struct token *token, GVariant **args, int nargs,
-                                        GError **error) {
+                                        GError **error, GVariantDict *context) {
     if (nargs != 1) {
         g_set_error(error, playerctl_formatter_error_quark(), 1,
                     "function markup_escape takes exactly one argument (got %d)", nargs);
@@ -543,7 +545,8 @@ static GVariant *helperfn_markup_escape(struct token *token, GVariant **args, in
     return ret;
 }
 
-static GVariant *helperfn_default(struct token *token, GVariant **args, int nargs, GError **error) {
+static GVariant *helperfn_default(struct token *token, GVariant **args, int nargs, GError **error,
+                                  GVariantDict *context) {
     if (nargs != 2) {
         g_set_error(error, playerctl_formatter_error_quark(), 1,
                     "function default takes exactly two arguments (got %d)", nargs);
@@ -568,7 +571,8 @@ static GVariant *helperfn_default(struct token *token, GVariant **args, int narg
     }
 }
 
-static GVariant *helperfn_emoji(struct token *token, GVariant **args, int nargs, GError **error) {
+static GVariant *helperfn_emoji(struct token *token, GVariant **args, int nargs, GError **error,
+                                GVariantDict *context) {
     if (nargs != 1) {
         g_set_error(error, playerctl_formatter_error_quark(), 1,
                     "function emoji takes exactly one argument (got %d)", nargs);
@@ -619,7 +623,34 @@ static GVariant *helperfn_emoji(struct token *token, GVariant **args, int nargs,
     return value;
 }
 
-static GVariant *helperfn_trunc(struct token *token, GVariant **args, int nargs, GError **error) {
+static GVariant *helperfn_resolve(struct token *token, GVariant **args, int nargs, GError **error,
+                                  GVariantDict *context) {
+    if (nargs != 1) {
+        g_set_error(error, playerctl_formatter_error_quark(), 1,
+                    "function resolve takes exactly two arguments (got %d)", nargs);
+    }
+    GVariant *value = args[0];
+    gchar *orig = pctl_print_gvariant(value);
+    PlayerctlFormatter *formatter = playerctl_formatter_new(orig, error);
+    if (*error != NULL) {
+        return NULL;
+    }
+    gchar *expand = playerctl_formatter_expand_format(formatter, context, error);
+    if (*error != NULL) {
+        return NULL;
+    }
+    GString *formatted = g_string_new(expand);
+    gchar *formatted_inner = g_string_free(formatted, FALSE);
+    GVariant *ret = g_variant_new("s", formatted_inner);
+    g_free(formatted_inner);
+    playerctl_formatter_destroy(formatter);
+    g_free(orig);
+
+    return ret;
+}
+
+static GVariant *helperfn_trunc(struct token *token, GVariant **args, int nargs, GError **error,
+                                GVariantDict *context) {
     if (nargs != 2) {
         g_set_error(error, playerctl_formatter_error_quark(), 1,
                     "function trunc takes exactly two arguments (got %d)", nargs);
@@ -690,7 +721,8 @@ static gdouble get_double_value(GVariant *value) {
     return 0.0;
 }
 
-static GVariant *infixfn_add(struct token *token, GVariant **args, int nargs, GError **error) {
+static GVariant *infixfn_add(struct token *token, GVariant **args, int nargs, GError **error,
+                             GVariantDict *context) {
     if (nargs == 1) {
         // unary addition
         if (!is_valid_numeric_type(args[0])) {
@@ -715,7 +747,17 @@ static GVariant *infixfn_add(struct token *token, GVariant **args, int nargs, GE
         return NULL;
     }
 
-    if (!is_valid_numeric_type(args[0]) || !is_valid_numeric_type(args[1])) {
+    if (g_variant_is_of_type(args[0], G_VARIANT_TYPE_STRING) && g_variant_is_of_type(args[1], G_VARIANT_TYPE_STRING)) {
+        GString *appended;
+        gchar *left = pctl_print_gvariant(args[0]);
+        appended = g_string_new(left);
+        gchar *right = pctl_print_gvariant(args[1]);
+        appended = g_string_append(appended, right);
+        gchar *appended_inner = g_string_free(appended, FALSE);
+        GVariant *ret = g_variant_new("s", appended_inner);
+        g_free(appended_inner);
+        return ret;
+    } else if (!is_valid_numeric_type(args[0]) || !is_valid_numeric_type(args[1])) {
         g_set_error(error, playerctl_formatter_error_quark(), 1,
                     "Got unsupported operand types for +: '%s' and '%s'",
                     g_variant_get_type_string(args[0]), g_variant_get_type_string(args[1]));
@@ -743,7 +785,8 @@ static GVariant *infixfn_add(struct token *token, GVariant **args, int nargs, GE
     return g_variant_new("d", result);
 }
 
-static GVariant *infixfn_sub(struct token *token, GVariant **args, int nargs, GError **error) {
+static GVariant *infixfn_sub(struct token *token, GVariant **args, int nargs, GError **error,
+                             GVariantDict *context) {
     if (nargs == 1) {
         // unary addition
         if (g_variant_is_of_type(args[0], G_VARIANT_TYPE_INT64)) {
@@ -800,7 +843,8 @@ static GVariant *infixfn_sub(struct token *token, GVariant **args, int nargs, GE
     return g_variant_new("d", result);
 }
 
-static GVariant *infixfn_mul(struct token *token, GVariant **args, int nargs, GError **error) {
+static GVariant *infixfn_mul(struct token *token, GVariant **args, int nargs, GError **error,
+                             GVariantDict *context) {
     if (nargs != 2) {
         g_set_error(error, playerctl_formatter_error_quark(), 1,
                     "Multiplication takes two arguments (got %d). This is a bug in Playerctl.",
@@ -834,7 +878,8 @@ static GVariant *infixfn_mul(struct token *token, GVariant **args, int nargs, GE
     return g_variant_new("d", result);
 }
 
-static GVariant *infixfn_div(struct token *token, GVariant **args, int nargs, GError **error) {
+static GVariant *infixfn_div(struct token *token, GVariant **args, int nargs, GError **error,
+                             GVariantDict *context) {
     if (nargs != 2) {
         g_set_error(error, playerctl_formatter_error_quark(), 1,
                     "Division takes two arguments (got %d). This is a bug in Playerctl.", nargs);
@@ -877,7 +922,8 @@ static GVariant *infixfn_div(struct token *token, GVariant **args, int nargs, GE
 
 struct template_function {
     const gchar *name;
-    GVariant *(*func)(struct token *token, GVariant **args, int nargs, GError **error);
+    GVariant *(*func)(struct token *token, GVariant **args, int nargs, GError **error,
+                      GVariantDict *context);
 } template_functions[] = {
     {"lc", &helperfn_lc},
     {"uc", &helperfn_uc},
@@ -886,6 +932,7 @@ struct template_function {
     {"default", &helperfn_default},
     {"emoji", &helperfn_emoji},
     {"trunc", &helperfn_trunc},
+    {"resolve", &helperfn_resolve},
     {INFIX_ADD, &infixfn_add},
     {INFIX_SUB, &infixfn_sub},
     {INFIX_MUL, &infixfn_mul},
@@ -930,7 +977,7 @@ static GVariant *expand_token(struct token *token, GVariantDict *context, GError
 
         for (gsize i = 0; i < LENGTH(template_functions); ++i) {
             if (g_strcmp0(template_functions[i].name, token->data) == 0) {
-                ret = template_functions[i].func(token, args, nargs, &tmp_error);
+                ret = template_functions[i].func(token, args, nargs, &tmp_error, context);
                 if (tmp_error != NULL) {
                     g_propagate_error(error, tmp_error);
                     goto func_out;
