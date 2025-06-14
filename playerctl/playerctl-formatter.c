@@ -593,7 +593,7 @@ static GVariant *helperfn_emoji(struct token *token, GVariant **args, int nargs,
     }
 
     gchar *key = arg_token->data;
-    gchar *status_emoji[3] = {"▶️", "⏹️", "⏸️"};
+    gchar *status_emoji[3] = {"▶️", "⏸️", "⏹️"};
     
     for (int i = 1; i < 4 && i < nargs; i++) {
       if (args[i] != NULL) {
@@ -609,9 +609,9 @@ static GVariant *helperfn_emoji(struct token *token, GVariant **args, int nargs,
             case PLAYERCTL_PLAYBACK_STATUS_PLAYING:
                 return g_variant_new("s", status_emoji[0]);
             case PLAYERCTL_PLAYBACK_STATUS_STOPPED:
-                return g_variant_new("s", status_emoji[1]);
-            case PLAYERCTL_PLAYBACK_STATUS_PAUSED:
                 return g_variant_new("s", status_emoji[2]);
+            case PLAYERCTL_PLAYBACK_STATUS_PAUSED:
+                return g_variant_new("s", status_emoji[1]);
             }
         }
     } else if (g_strcmp0(key, "volume") == 0 &&
