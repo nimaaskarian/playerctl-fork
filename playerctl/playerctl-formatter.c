@@ -573,9 +573,9 @@ static GVariant *helperfn_default(struct token *token, GVariant **args, int narg
 
 static GVariant *helperfn_emoji(struct token *token, GVariant **args, int nargs, GError **error,
                                 GVariantDict *context) {
-    if (nargs != 1) {
+    if (nargs > 4 || nargs < 1) {
         g_set_error(error, playerctl_formatter_error_quark(), 1,
-                    "function emoji takes exactly one argument (got %d)", nargs);
+                    "function emoji takes one to four arguments (got %d)", nargs);
         return NULL;
     }
 
@@ -593,6 +593,13 @@ static GVariant *helperfn_emoji(struct token *token, GVariant **args, int nargs,
     }
 
     gchar *key = arg_token->data;
+    gchar *status_emoji[3] = {"▶️", "⏹️", "⏸️"};
+    
+    for (int i = 1; i < 4 && i < nargs; i++) {
+      if (args[i] != NULL) {
+        status_emoji[i-1] = pctl_print_gvariant(args[i]);
+      }
+    }
 
     if (g_strcmp0(key, "status") == 0 && g_variant_is_of_type(value, G_VARIANT_TYPE_STRING)) {
         const gchar *status_str = g_variant_get_string(value, NULL);
@@ -600,11 +607,11 @@ static GVariant *helperfn_emoji(struct token *token, GVariant **args, int nargs,
         if (pctl_parse_playback_status(status_str, &status)) {
             switch (status) {
             case PLAYERCTL_PLAYBACK_STATUS_PLAYING:
-                return g_variant_new("s", "▶️");
+                return g_variant_new("s", status_emoji[0]);
             case PLAYERCTL_PLAYBACK_STATUS_STOPPED:
-                return g_variant_new("s", "⏹️");
+                return g_variant_new("s", status_emoji[1]);
             case PLAYERCTL_PLAYBACK_STATUS_PAUSED:
-                return g_variant_new("s", "⏸️");
+                return g_variant_new("s", status_emoji[2]);
             }
         }
     } else if (g_strcmp0(key, "volume") == 0 &&
